@@ -827,16 +827,28 @@ function toggleProxyHint() {
 为什么需要代理？
 subclaude.tec-do.cn 的 API 有 CORS 限制，
 从本地文件直接调用会被浏览器阻止。
-代理在 localhost:8899 运行，转发请求并添加 CORS 头。
+代理在本地运行，转发请求并添加 CORS 头。
 
-启动代理：
-  双击 start.bat
-  或 命令行运行：python proxy.py
+启动方式：
+  双击 start.bat（推荐）
+  或 命令行：python proxy.py
+
+命令行参数：
+  --port 8899              指定代理端口（默认 8899）
+  --settings-path <路径>    指定 Claude settings.json 路径
+                           默认: ~/.claude/settings.json
+
+环境变量：
+  CLAUDE_SETTINGS_PATH      自定义配置路径（优先级低于 --settings-path）
+
+修改代理地址：
+  点击面板顶部的 ⚙ 按钮，输入新地址后自动重连
 
 如果代理已启动但显示"未连接"：
   1. 检查命令行窗口是否正常运行
-  2. 确认端口 8899 未被占用
+  2. 确认端口未被占用
   3. 点击"检测代理"按钮重试
+  4. 如修改过端口，需通过 ⚙ 同步代理地址
 `.trim();
   alert(info);
 }
