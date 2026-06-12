@@ -3,8 +3,9 @@ Claude API KEY 用量面板 — 本地 CORS 代理
 ==========================================
 解决 subclaude.tec-do.cn 的 CORS 限制，让本地 HTML 页面可以查询用量。
 
-用法: python proxy.py [--port 8899]
+用法: python proxy.py [--port 8899] [--settings-path ~/.claude/settings.json]
 端口: 默认 8899
+配置路径: 可通过环境变量 CLAUDE_SETTINGS_PATH 或 --settings-path 指定
 依赖: 仅 Python 标准库（无需 pip install）
 """
 
@@ -19,7 +20,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, urlencode
 
 TARGET_BASE = "https://subclaude.tec-do.cn"
-SETTINGS_PATH = os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
+SETTINGS_PATH = os.environ.get("CLAUDE_SETTINGS_PATH") or os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
 
 
 def read_claude_settings():
@@ -209,13 +210,23 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "Not found"})
 
 def main():
+    global SETTINGS_PATH
+
     port = 8899
-    if len(sys.argv) > 2 and sys.argv[1] == "--port":
-        port = int(sys.argv[2])
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        if args[i] == "--port" and i + 1 < len(args):
+            port = int(args[i + 1]); i += 2
+        elif args[i] == "--settings-path" and i + 1 < len(args):
+            SETTINGS_PATH = args[i + 1]; i += 2
+        else:
+            i += 1
 
     server = HTTPServer(("127.0.0.1", port), ProxyHandler)
     print(f" Claude KEY 用量代理已启动")
     print(f"   地址: http://127.0.0.1:{port}")
+    print(f"   配置: {SETTINGS_PATH}")
     print(f"   目标: {TARGET_BASE}")
     print(f"   健康检查: http://127.0.0.1:{port}/health")
     print(f"   Ctrl+C 停止")
