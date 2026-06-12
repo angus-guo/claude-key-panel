@@ -512,7 +512,11 @@
     </div>
     <div>
       <label>API KEY</label>
-      <input type="password" id="modalKey" placeholder="sk-...">
+      <div style="display:flex;gap:6px">
+        <input type="password" id="modalKey" placeholder="sk-..." style="flex:1">
+        <button class="btn btn-sm" type="button" onclick="toggleModalKey()" title="显示/隐藏 KEY">👁</button>
+        <button class="btn btn-sm" type="button" onclick="copyModalKey()" title="复制 KEY">📋</button>
+      </div>
       <div style="margin-top:4px;font-size:0.72rem;color:var(--text-dim)">
         KEY 仅存储在浏览器本地，不会上传
       </div>
@@ -747,6 +751,21 @@ function deleteKey(id) {
   saveKeys();
   renderKeyList();
   toast('KEY 已删除', 'success');
+}
+
+function toggleModalKey() {
+  const inp = document.getElementById('modalKey');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function copyModalKey() {
+  const inp = document.getElementById('modalKey');
+  const was = inp.type;
+  inp.type = 'text'; // 先切换到明文才能选中完整内容
+  inp.select();
+  document.execCommand('copy');
+  inp.type = was;
+  toast('KEY 已复制到剪贴板', 'success');
 }
 
 function closeModal(event) {
