@@ -435,6 +435,7 @@
         <span id="proxyLabel">检测中...</span>
       </span>
       <button class="btn btn-sm" onclick="checkProxy()" title="检测代理连接">🔗 检测代理</button>
+      <button class="btn btn-sm" onclick="changeProxyBase()" title="修改代理地址">⚙</button>
       <button class="btn btn-sm" onclick="toggleProxyHint()">❓ 帮助</button>
     </div>
   </div>
@@ -528,7 +529,7 @@
 
 <script>
 // ── 常量 ──
-const PROXY_BASE = 'http://localhost:8899';
+let PROXY_BASE = localStorage.getItem('claude_proxy_base') || 'http://localhost:8899';
 const API_TARGET = 'https://subclaude.tec-do.cn/v1/usage';
 const STORAGE_KEY = 'claude_key_panel_keys';
 const STORAGE_ACTIVE = 'claude_key_panel_active';
@@ -838,6 +839,17 @@ subclaude.tec-do.cn 的 API 有 CORS 限制，
   3. 点击"检测代理"按钮重试
 `.trim();
   alert(info);
+}
+
+function changeProxyBase() {
+  const newUrl = prompt('代理地址（默认 http://localhost:8899）：', PROXY_BASE);
+  if (!newUrl) return;
+  const trimmed = newUrl.trim().replace(/\/+$/, '');
+  if (!trimmed.startsWith('http')) { toast('地址需以 http:// 或 https:// 开头', 'error'); return; }
+  localStorage.setItem('claude_proxy_base', trimmed);
+  PROXY_BASE = trimmed;
+  toast('代理地址已更新为 ' + trimmed, 'success');
+  checkProxy();
 }
 
 // ── 查询 ──
