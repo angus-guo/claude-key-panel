@@ -1,0 +1,6 @@
+# Claude KEY 用量面板 — .gitignore
+# 代理日志/临时文件
+__pycache__/
+*.pyc
+*.bak
+*.tmp

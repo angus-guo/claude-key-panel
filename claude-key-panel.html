@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude API KEY 用量面板</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent-dim: #1f6feb;
+    --success: #3fb950;
+    --warn: #d2991d;
+    --danger: #f85149;
+    --radius: 8px;
+    --shadow: 0 0 0 1px var(--border);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 1100px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .header h1 .icon { font-size: 1.6rem; }
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    background: var(--surface);
+    color: var(--text);
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: #1c2129; border-color: #484f58; }
+  .btn-primary { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
+  .btn-primary:hover { background: #1a5dcd; }
+  .btn-danger { color: var(--danger); }
+  .btn-danger:hover { background: #2d1215; border-color: var(--danger); }
+  .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+  .btn-xs { padding: 2px 8px; font-size: 0.75rem; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Main layout: sidebar + content */
+  .main {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* Sidebar — KEY list */
+  .sidebar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 70vh;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .sidebar-header h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .key-count {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    background: var(--bg);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .key-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 10px 4px 4px;
+    margin: -6px -10px -4px -4px;
+  }
+  .key-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--bg);
+    position: relative;
+  }
+  .key-item:hover { border-color: #484f58; }
+  .key-item.active {
+    border-color: var(--accent);
+    background: #0d2847;
+  }
+  .key-item.active::before {
+    content: '⭐';
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    font-size: 0.8rem;
+  }
+  .key-alias {
+    font-weight: 500;
+    font-size: 0.85rem;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .key-prefix {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+  }
+  .key-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .key-item:hover .key-actions { opacity: 1; }
+  .key-item.active .key-actions { opacity: 1; }
+
+  .empty-keys {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 32px 0;
+    font-size: 0.85rem;
+  }
+
+  /* Content area */
+  .content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* Date bar */
+  .date-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .date-bar label {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+  .date-bar input[type="date"] {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.85rem;
+    font-family: inherit;
+  }
+  .date-bar input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+  }
+  .date-presets {
+    display: flex;
+    gap: 4px;
+  }
+  .date-presets .btn { padding: 5px 10px; font-size: 0.78rem; }
+
+  .spacer { flex: 1; }
+
+  /* Result table */
+  .result-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .result-header h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .result-status {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+  .result-status.ok { color: var(--success); }
+  .result-status.err { color: var(--danger); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  thead {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 1;
+  }
+  th {
+    text-align: left;
+    padding: 10px 18px;
+    font-weight: 500;
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 18px;
+    border-bottom: 1px solid #1c2129;
+  }
+  tbody tr:hover { background: #1c2129; }
+  tbody tr.row-active { background: #0d2847; }
+  tfoot td {
+    font-weight: 600;
+    border-top: 2px solid var(--border);
+    background: #1c2129;
+  }
+  .usage-bar-wrap {
+    width: 100px;
+    height: 6px;
+    background: var(--bg);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .usage-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s;
+    background: var(--success);
+  }
+  .usage-bar-fill.high { background: var(--warn); }
+  .usage-bar-fill.critical { background: var(--danger); }
+  .mono { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.82rem; }
+  .cost { color: var(--success); }
+  .no-data {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-dim);
+  }
+
+  /* Add/Edit modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: 420px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .modal h3 { font-size: 1rem; font-weight: 600; }
+  .modal label { font-size: 0.82rem; color: var(--text-dim); }
+  .modal input {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.85rem;
+    font-family: inherit;
+  }
+  .modal input:focus { outline: none; border-color: var(--accent); }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    z-index: 200;
+    animation: slideIn 0.25s ease-out;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .toast.success { background: #1a3a1e; border: 1px solid var(--success); color: var(--success); }
+  .toast.error { background: #3a1a1a; border: 1px solid var(--danger); color: var(--danger); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  /* Proxy status */
+  .proxy-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+  .proxy-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+  }
+  .proxy-dot.online { background: var(--success); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar { max-height: 300px; }
+    .date-bar { flex-direction: column; align-items: flex-start; }
+  }
+
+  /* Expand/collapse rows */
+  .key-summary-row { transition: background 0.15s; }
+  .key-summary-row:hover { background: #1c2129 !important; }
+  .key-summary-row.expanded { background: #1a2332 !important; border-bottom: 1px solid var(--accent-dim); }
+  .expand-icon {
+    display: inline-block;
+    width: 16px;
+    font-size: 0.7rem;
+    transition: transform 0.2s;
+    margin-right: 4px;
+    color: var(--text-dim);
+  }
+  .key-detail-row { background: #0d1117; }
+  .key-detail-row td { padding: 0; }
+  .detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    margin: 8px 0;
+  }
+  .detail-table th {
+    padding: 6px 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-bottom: 1px solid var(--border);
+    background: #0d1117;
+  }
+  .detail-table td {
+    padding: 5px 12px;
+    border-bottom: 1px solid #161b22;
+    font-size: 0.8rem;
+  }
+  .detail-table tbody tr:hover { background: #161b22; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <h1><span class="icon">🔑</span>Claude API KEY 用量面板</h1>
+    <div class="header-actions">
+      <span class="proxy-status" id="proxyStatus" title="代理连接状态">
+        <span class="proxy-dot" id="proxyDot"></span>
+        <span id="proxyLabel">检测中...</span>
+      </span>
+      <button class="btn btn-sm" onclick="checkProxy()" title="检测代理连接">🔗 检测代理</button>
+      <button class="btn btn-sm" onclick="toggleProxyHint()">❓ 帮助</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h2>我的 KEY</h2>
+        <span class="key-count" id="keyCount">0</span>
+      </div>
+      <div class="key-list" id="keyList">
+        <div class="empty-keys">还没有添加 KEY<br>点击下方按钮添加</div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="showAddModal()">
+        ＋ 添加 API KEY
+      </button>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <!-- Date bar -->
+      <div class="date-bar">
+        <label>📅 日期范围</label>
+        <input type="date" id="dateFrom">
+        <span style="color:var(--text-dim)">至</span>
+        <input type="date" id="dateTo">
+        <div class="date-presets">
+          <button class="btn btn-sm" onclick="setDatePreset('today')">今天</button>
+          <button class="btn btn-sm" onclick="setDatePreset('yesterday')">昨天</button>
+          <button class="btn btn-sm" onclick="setDatePreset('7days')">近7天</button>
+          <button class="btn btn-sm" onclick="setDatePreset('30days')">近30天</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" onclick="queryActive()" id="btnQueryActive">🔍 查活跃KEY</button>
+        <button class="btn btn-primary" onclick="queryAll()" id="btnQueryAll">📊 查询全部</button>
+      </div>
+
+      <!-- Result -->
+      <div class="result-section">
+        <div class="result-header">
+          <h2>用量明细</h2>
+          <span class="result-status" id="resultStatus"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>KEY</th>
+                <th>日限额</th>
+                <th>周限额</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="resultBody">
+              <tr><td colspan="4" class="no-data">选择 KEY 并点击查询按钮</td></tr>
+            </tbody>
+            <tfoot id="resultFoot" style="display:none"></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="modalOverlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3 id="modalTitle">添加 API KEY</h3>
+    <div>
+      <label>别名（方便识别）</label>
+      <input type="text" id="modalAlias" placeholder="例如：主账号 / 开发测试 / Team-A" maxlength="30">
+    </div>
+    <div>
+      <label>API KEY</label>
+      <input type="password" id="modalKey" placeholder="sk-...">
+      <div style="margin-top:4px;font-size:0.72rem;color:var(--text-dim)">
+        KEY 仅存储在浏览器本地，不会上传
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" id="modalConfirm" onclick="saveKey()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toastContainer"></div>
+
+<script>
+// ── 常量 ──
+const PROXY_BASE = 'http://localhost:8899';
+const API_TARGET = 'https://subclaude.tec-do.cn/v1/usage';
+const STORAGE_KEY = 'claude_key_panel_keys';
+const STORAGE_ACTIVE = 'claude_key_panel_active';
+
+// ── 状态 ──
+let keys = [];
+let activeKeyId = null;
+let editingKeyId = null;
+let proxyOnline = false;
+
+// ── 初始化 ──
+function init() {
+  loadKeys();
+  renderKeyList();
+  setDatePreset('today');
+  checkProxy();
+  syncActiveKey();
+}
+
+function loadKeys() {
+  try {
+    keys = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+  } catch { keys = []; }
+  try {
+    activeKeyId = localStorage.getItem(STORAGE_ACTIVE) || null;
+  } catch { activeKeyId = null; }
+  // 如果活跃 KEY 已删除，清除
+  if (activeKeyId && !keys.find(k => k.id === activeKeyId)) {
+    activeKeyId = null;
+    saveActive();
+  }
+  // 如果只有一个 KEY，自动设为活跃
+  if (!activeKeyId && keys.length === 1) {
+    activeKeyId = keys[0].id;
+    saveActive();
+  }
+}
+
+function saveKeys() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(keys));
+}
+
+function saveActive() {
+  if (activeKeyId) localStorage.setItem(STORAGE_ACTIVE, activeKeyId);
+  else localStorage.removeItem(STORAGE_ACTIVE);
+}
+
+// ── KEY 列表渲染 ──
+function renderKeyList() {
+  const container = document.getElementById('keyList');
+  const countEl = document.getElementById('keyCount');
+  countEl.textContent = keys.length;
+
+  if (keys.length === 0) {
+    container.innerHTML = '<div class="empty-keys">还没有添加 KEY<br>点击下方按钮添加</div>';
+    return;
+  }
+
+  container.innerHTML = keys.map(k => {
+    const isActive = k.id === activeKeyId;
+    const prefix = maskKey(k.key);
+    return `
+      <div class="key-item ${isActive ? 'active' : ''}" onclick="setActiveKey('${k.id}')" title="点击设为活跃 KEY">
+        <div style="flex:1;min-width:0">
+          <div class="key-alias">${escHtml(k.alias || '未命名')}</div>
+          <div class="key-prefix">${prefix}</div>
+        </div>
+        <div class="key-actions">
+          <button class="btn btn-xs" onclick="event.stopPropagation();copyKey('${k.id}')" title="复制 KEY">📋</button>
+          <button class="btn btn-xs" onclick="event.stopPropagation();editKey('${k.id}')" title="编辑">✏️</button>
+          <button class="btn btn-xs btn-danger" onclick="event.stopPropagation();deleteKey('${k.id}')" title="删除">🗑</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function maskKey(key) {
+  if (!key) return '';
+  const clean = key.replace(/^sk-/i, '');
+  if (clean.length <= 8) return 'sk-' + clean;
+  return 'sk-' + clean.slice(0, 6) + '…' + clean.slice(-4);
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ── 活跃 KEY 操作 ──
+function setActiveKey(id) {
+  activeKeyId = id;
+  saveActive();
+  renderKeyList();
+  toast('已切换活跃 KEY', 'success');
+  doSwitchKey(id);
+}
+
+async function doSwitchKey(id) {
+  const k = keys.find(x => x.id === id);
+  if (!k || !proxyOnline) return;
+  try {
+    const resp = await fetch(PROXY_BASE + '/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: k.key }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await resp.json();
+    if (data.switched) {
+      toast('✅ 已切换 Claude Code 配置', 'success');
+    } else if (data.message) {
+      toast('ℹ ' + data.message, 'success');
+    }
+  } catch (e) {
+    toast('⚠ 面板切换成功，但配置写入失败：' + e.message, 'error');
+  }
+}
+
+async function syncActiveKey() {
+  if (!proxyOnline) { setTimeout(syncActiveKey, 2000); return; }
+  try {
+    const resp = await fetch(PROXY_BASE + '/current-key', { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const curKey = data.apiKey || '';
+    if (!curKey) return;
+    // 匹配已保存的 KEY
+    const match = keys.find(k => k.key.trim() === curKey.trim());
+    if (match && match.id !== activeKeyId) {
+      activeKeyId = match.id;
+      saveActive();
+      renderKeyList();
+    }
+  } catch {}
+}
+
+function copyKey(id) {
+  const k = keys.find(x => x.id === id);
+  if (!k) return;
+  navigator.clipboard.writeText(k.key).then(() => {
+    toast('KEY 已复制到剪贴板', 'success');
+  }).catch(() => {
+    // 回退
+    const ta = document.createElement('textarea');
+    ta.value = k.key;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('KEY 已复制到剪贴板', 'success');
+  });
+}
+
+// ── KEY CRUD ──
+function showAddModal() {
+  editingKeyId = null;
+  document.getElementById('modalTitle').textContent = '添加 API KEY';
+  document.getElementById('modalAlias').value = '';
+  document.getElementById('modalKey').value = '';
+  document.getElementById('modalConfirm').textContent = '保存';
+  document.getElementById('modalOverlay').style.display = 'flex';
+  document.getElementById('modalAlias').focus();
+}
+
+function editKey(id) {
+  const k = keys.find(x => x.id === id);
+  if (!k) return;
+  editingKeyId = id;
+  document.getElementById('modalTitle').textContent = '编辑 API KEY';
+  document.getElementById('modalAlias').value = k.alias || '';
+  document.getElementById('modalKey').value = k.key || '';
+  document.getElementById('modalConfirm').textContent = '更新';
+  document.getElementById('modalOverlay').style.display = 'flex';
+}
+
+function saveKey() {
+  const alias = document.getElementById('modalAlias').value.trim();
+  const key = document.getElementById('modalKey').value.trim();
+
+  if (!key) { toast('请输入 API KEY', 'error'); return; }
+  if (!key.startsWith('sk-')) { toast('API KEY 应以 sk- 开头', 'error'); return; }
+
+  if (editingKeyId) {
+    const k = keys.find(x => x.id === editingKeyId);
+    if (k) {
+      k.alias = alias || '未命名';
+      k.key = key;
+    }
+  } else {
+    keys.push({
+      id: 'key_' + Date.now(),
+      alias: alias || '未命名',
+      key: key
+    });
+  }
+
+  saveKeys();
+  if (!activeKeyId || keys.length === 1) {
+    activeKeyId = keys[keys.length - 1].id;
+    saveActive();
+  }
+  renderKeyList();
+  closeModal();
+  toast(editingKeyId ? 'KEY 已更新' : 'KEY 已添加', 'success');
+}
+
+function deleteKey(id) {
+  if (!confirm('确定要删除这个 KEY 吗？此操作不可恢复。')) return;
+  keys = keys.filter(k => k.id !== id);
+  if (activeKeyId === id) {
+    activeKeyId = keys.length > 0 ? keys[0].id : null;
+    saveActive();
+  }
+  saveKeys();
+  renderKeyList();
+  toast('KEY 已删除', 'success');
+}
+
+function closeModal(event) {
+  if (event && event.target !== document.getElementById('modalOverlay')) return;
+  document.getElementById('modalOverlay').style.display = 'none';
+  editingKeyId = null;
+}
+
+// ── 日期 ──
+function setDatePreset(preset) {
+  const today = new Date();
+  const toStr = d => d.toISOString().slice(0, 10);
+  let from, to;
+
+  switch (preset) {
+    case 'today':
+      from = to = toStr(today);
+      break;
+    case 'yesterday':
+      today.setDate(today.getDate() - 1);
+      from = to = toStr(today);
+      break;
+    case '7days':
+      to = toStr(today);
+      today.setDate(today.getDate() - 6);
+      from = toStr(today);
+      break;
+    case '30days':
+      to = toStr(today);
+      today.setDate(today.getDate() - 29);
+      from = toStr(today);
+      break;
+  }
+  document.getElementById('dateFrom').value = from;
+  document.getElementById('dateTo').value = to;
+}
+
+function getDateRange() {
+  return {
+    from: document.getElementById('dateFrom').value,
+    to: document.getElementById('dateTo').value
+  };
+}
+
+// ── 代理检测 ──
+async function checkProxy() {
+  try {
+    const resp = await fetch(PROXY_BASE + '/health', { signal: AbortSignal.timeout(3000) });
+    if (resp.ok) {
+      proxyOnline = true;
+      updateProxyUI(true);
+      return;
+    }
+  } catch {}
+  proxyOnline = false;
+  updateProxyUI(false);
+}
+
+function updateProxyUI(online) {
+  proxyOnline = online;
+  const dot = document.getElementById('proxyDot');
+  const label = document.getElementById('proxyLabel');
+  if (online) {
+    dot.className = 'proxy-dot online';
+    label.textContent = '代理已连接';
+  } else {
+    dot.className = 'proxy-dot';
+    label.textContent = '代理未连接';
+  }
+  document.getElementById('btnQueryActive').disabled = !online;
+  document.getElementById('btnQueryAll').disabled = !online;
+}
+
+function toggleProxyHint() {
+  const info = `
+代理使用说明：
+
+为什么需要代理？
+subclaude.tec-do.cn 的 API 有 CORS 限制，
+从本地文件直接调用会被浏览器阻止。
+代理在 localhost:8899 运行，转发请求并添加 CORS 头。
+
+启动代理：
+  双击 start.bat
+  或 命令行运行：python proxy.py
+
+如果代理已启动但显示"未连接"：
+  1. 检查命令行窗口是否正常运行
+  2. 确认端口 8899 未被占用
+  3. 点击"检测代理"按钮重试
+`.trim();
+  alert(info);
+}
+
+// ── 查询 ──
+async function queryActive() {
+  if (!activeKeyId) { toast('请先在左侧选择一个活跃 KEY', 'error'); return; }
+  const k = keys.find(x => x.id === activeKeyId);
+  if (!k) return;
+  await doQuery([k]);
+}
+
+async function queryAll() {
+  if (keys.length === 0) { toast('请先添加 API KEY', 'error'); return; }
+  await doQuery(keys);
+}
+
+async function doQuery(keyList) {
+  const { from, to } = getDateRange();
+  if (!from || !to) { toast('请选择日期范围', 'error'); return; }
+
+  updateProxyUI(proxyOnline);
+  if (!proxyOnline) {
+    toast('代理未连接，请先启动 start.bat', 'error');
+    return;
+  }
+
+  const statusEl = document.getElementById('resultStatus');
+  statusEl.textContent = '查询中...';
+  statusEl.className = 'result-status';
+
+  const results = [];
+  const errors = [];
+
+  for (const k of keyList) {
+    try {
+      const url = `${PROXY_BASE}/proxy/usage?start_date=${from}&end_date=${to}&key=${encodeURIComponent(k.key)}`;
+      const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!resp.ok) {
+        const errBody = await resp.text().catch(() => '');
+        errors.push({ alias: k.alias, keyId: k.id, error: `HTTP ${resp.status}: ${errBody.slice(0, 100)}` });
+        continue;
+      }
+      const data = await resp.json();
+      results.push({ alias: k.alias, keyId: k.id, data });
+    } catch (e) {
+      errors.push({ alias: k.alias, keyId: k.id, error: e.message });
+    }
+  }
+
+  renderResults(results, errors, from, to);
+
+  if (errors.length === 0) {
+    statusEl.textContent = `✅ 查询完成 · ${results.length} 个 KEY`;
+    statusEl.className = 'result-status ok';
+  } else if (results.length === 0) {
+    statusEl.textContent = `❌ 全部查询失败`;
+    statusEl.className = 'result-status err';
+  } else {
+    statusEl.textContent = `⚠️ ${results.length} 成功 · ${errors.length} 失败`;
+    statusEl.className = 'result-status';
+  }
+}
+
+function parseUsageData(data) {
+  // 格式 0: subclaude.tec-do.cn — model_stats 数组
+  // { model_stats: [{ model, requests, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, total_tokens, cost }], rate_limits: [{ window:"1d"|"7d", used, limit }] }
+  if (data.model_stats && Array.isArray(data.model_stats)) {
+    const models = data.model_stats.map(m => ({
+      model: m.model || '—',
+      requests: m.requests || 0,
+      input_tokens: m.input_tokens || 0,
+      output_tokens: m.output_tokens || 0,
+      cache_creation_tokens: m.cache_creation_tokens || 0,
+      cache_read_tokens: m.cache_read_tokens || 0,
+      total_tokens: m.total_tokens || 0,
+      cost: m.cost || 0,
+    }));
+    const rl = data.rate_limits || [];
+    const dailyLimit = rl.find(r => r.window === '1d') || null;
+    const weeklyLimit = rl.find(r => r.window === '7d') || null;
+    return { models, dailyLimit, weeklyLimit, raw: data };
+  }
+
+  // 格式 1-4: 其他格式 — 统一转为 models 数组
+  let rows = [];
+
+  if (data.data && Array.isArray(data.data)) {
+    for (const item of data.data) {
+      if (item.results && Array.isArray(item.results)) {
+        for (const r of item.results) {
+          rows.push({ model: r.model || '', requests: 0, input_tokens: r.input_tokens || 0, output_tokens: r.output_tokens || 0, cache_creation_tokens: r.cache_creation_input_tokens || 0, cache_read_tokens: r.cache_read_input_tokens || 0, total_tokens: (r.input_tokens||0)+(r.output_tokens||0), cost: 0 });
+        }
+      }
+    }
+  }
+
+  if (rows.length === 0 && data.usage && Array.isArray(data.usage)) {
+    for (const u of data.usage) {
+      rows.push({ model: u.model || '', requests: 0, input_tokens: u.input_tokens||u.input||0, output_tokens: u.output_tokens||u.output||0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: (u.input_tokens||u.input||0)+(u.output_tokens||u.output||0), cost: 0 });
+    }
+  }
+
+  if (rows.length === 0 && (data.total_cost !== undefined || data.total_tokens !== undefined)) {
+    rows.push({ model: 'all', requests: 0, input_tokens: data.input_tokens||data.total_tokens||0, output_tokens: data.output_tokens||0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: data.total_tokens||0, cost: data.total_cost||0 });
+  }
+
+  if (rows.length === 0 && Array.isArray(data) && data.length > 0 && typeof data[0] === 'object') {
+    for (const item of data) {
+      rows.push({ model: item.model||'', requests: 0, input_tokens: item.input_tokens||item.input||0, output_tokens: item.output_tokens||item.output||0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: (item.input_tokens||item.input||0)+(item.output_tokens||item.output||0), cost: 0 });
+    }
+  }
+
+  return { models: rows, dailyLimit: null, weeklyLimit: null, raw: data };
+}
+
+function formatResetTime(isoStr) {
+  try {
+    const d = new Date(isoStr);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    const resetDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    if (resetDay.getTime() === today.getTime()) return '今天 ' + time;
+    if (resetDay.getTime() === tomorrow.getTime()) return '明天 ' + time;
+    return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + time;
+  } catch { return isoStr; }
+}
+
+function renderResults(results, errors, from, to) {
+  const tbody = document.getElementById('resultBody');
+  const tfoot = document.getElementById('resultFoot');
+
+  if (results.length === 0 && errors.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="no-data">无数据</td></tr>';
+    tfoot.style.display = 'none';
+    return;
+  }
+
+  let html = '';
+  let grandDailyUsed = 0, grandDailyLimit = 0;
+  let grandWeeklyUsed = 0, grandWeeklyLimit = 0;
+
+  // 错误行
+  for (const err of errors) {
+    html += `<tr style="color:var(--danger)">
+      <td>${escHtml(err.alias || '?')}</td>
+      <td colspan="2">错误：${escHtml(err.error)}</td>
+      <td><button class="btn btn-xs btn-danger" onclick="querySingle('${err.keyId}')">重试</button></td>
+    </tr>`;
+  }
+
+  // 结果行
+  let ki = 0;
+  for (const r of results) {
+    const parsed = parseUsageData(r.data);
+    const isActive = r.keyId === activeKeyId;
+    ki++;
+
+    // KEY 级别汇总
+    let keyCost = 0, keyTokens = 0, keyRequests = 0;
+    for (const m of parsed.models) {
+      keyCost += m.cost;
+      keyTokens += m.total_tokens;
+      keyRequests += m.requests;
+    }
+
+    // 日限额进度条
+    let dailyHtml = '<span style="color:var(--text-dim)">—</span>';
+    if (parsed.dailyLimit) {
+      const u = parsed.dailyLimit.used || 0;
+      const l = parsed.dailyLimit.limit || 1;
+      const p = Math.min((u / l) * 100, 100);
+      const cls = p > 90 ? 'critical' : (p > 70 ? 'high' : '');
+      const r = parsed.dailyLimit.reset_at ? formatResetTime(parsed.dailyLimit.reset_at) : '';
+      dailyHtml = `<div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="usage-bar-wrap"><div class="usage-bar-fill ${cls}" style="width:${p}%"></div></div>
+          <span style="font-size:0.78rem;white-space:nowrap">$${u.toFixed(2)} / $${l.toFixed(0)}</span>
+        </div>${r ? `<div style="font-size:0.65rem;color:var(--text-dim);margin-top:1px">重置 ${r}</div>` : ''}
+      </div>`;
+      grandDailyUsed += u; grandDailyLimit += l;
+    }
+
+    // 周限额进度条
+    let weeklyHtml = '<span style="color:var(--text-dim)">—</span>';
+    if (parsed.weeklyLimit) {
+      const u = parsed.weeklyLimit.used || 0;
+      const l = parsed.weeklyLimit.limit || 1;
+      const p = Math.min((u / l) * 100, 100);
+      const cls = p > 90 ? 'critical' : (p > 70 ? 'high' : '');
+      const r = parsed.weeklyLimit.reset_at ? formatResetTime(parsed.weeklyLimit.reset_at) : '';
+      weeklyHtml = `<div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="usage-bar-wrap"><div class="usage-bar-fill ${cls}" style="width:${p}%"></div></div>
+          <span style="font-size:0.78rem;white-space:nowrap">$${u.toFixed(2)} / $${l.toFixed(0)}</span>
+        </div>${r ? `<div style="font-size:0.65rem;color:var(--text-dim);margin-top:1px">重置 ${r}</div>` : ''}
+      </div>`;
+      grandWeeklyUsed += u; grandWeeklyLimit += l;
+    }
+
+    const detailId = `detail-${ki}`;
+    const iconId = `icon-${ki}`;
+
+    html += `<tr class="key-summary-row ${isActive ? 'row-active' : ''}" onclick="toggleDetail('${detailId}','${iconId}',this)" style="cursor:pointer">
+      <td>
+        <span class="expand-icon" id="${iconId}">▶</span>
+        <strong>${escHtml(r.alias)}</strong>
+        <div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px">请求 ${keyRequests} · Token ${keyTokens.toLocaleString()} · $${keyCost.toFixed(4)}</div>
+      </td>
+      <td>${dailyHtml}</td>
+      <td>${weeklyHtml}</td>
+      <td><button class="btn btn-xs" onclick="event.stopPropagation();setActiveKey('${r.keyId}')">⭐ 切换</button></td>
+    </tr>`;
+
+    // 模型明细行（默认隐藏）
+    html += `<tr class="key-detail-row" id="${detailId}" style="display:none">
+      <td colspan="4">
+        <table class="detail-table">
+          <thead><tr>
+            <th>模型</th><th>请求</th><th>输入 Token</th><th>输出 Token</th>
+            <th>缓存创建</th><th>缓存读取</th><th>总 Token</th><th>花费</th>
+          </tr></thead>
+          <tbody>`;
+    for (const m of parsed.models) {
+      html += `<tr>
+        <td>${escHtml(m.model)}</td>
+        <td>${m.requests.toLocaleString()}</td>
+        <td class="mono">${m.input_tokens.toLocaleString()}</td>
+        <td class="mono">${m.output_tokens.toLocaleString()}</td>
+        <td class="mono">${m.cache_creation_tokens.toLocaleString()}</td>
+        <td class="mono">${m.cache_read_tokens.toLocaleString()}</td>
+        <td class="mono">${m.total_tokens.toLocaleString()}</td>
+        <td class="mono cost">$${m.cost.toFixed(4)}</td>
+      </tr>`;
+    }
+    html += `</tbody></table></td></tr>`;
+  }
+
+  tbody.innerHTML = html || '<tr><td colspan="4" class="no-data">无数据</td></tr>';
+
+  // 汇总行
+  if (results.length > 0) {
+    tfoot.style.display = '';
+    tfoot.innerHTML = `<tr>
+      <td>📊 合计 · ${results.length} 个 KEY</td>
+      <td>${grandDailyLimit > 0 ? `<span style="font-size:0.78rem">$${grandDailyUsed.toFixed(2)} / $${grandDailyLimit.toFixed(0)}</span>` : '—'}</td>
+      <td>${grandWeeklyLimit > 0 ? `<span style="font-size:0.78rem">$${grandWeeklyUsed.toFixed(2)} / $${grandWeeklyLimit.toFixed(0)}</span>` : '—'}</td>
+      <td></td>
+    </tr>`;
+  } else {
+    tfoot.style.display = 'none';
+  }
+}
+
+function toggleDetail(detailId, iconId, row) {
+  const detail = document.getElementById(detailId);
+  const icon = document.getElementById(iconId);
+  if (!detail) return;
+  if (detail.style.display === 'none' || detail.style.display === '') {
+    const hidden = detail.style.display === 'none';
+    detail.style.display = hidden ? '' : 'none';
+    if (icon) icon.textContent = hidden ? '▼' : '▶';
+    // toggle active class
+    if (row) row.classList.toggle('expanded');
+  } else {
+    detail.style.display = 'none';
+    if (icon) icon.textContent = '▶';
+    if (row) row.classList.remove('expanded');
+  }
+}
+
+async function querySingle(keyId) {
+  const k = keys.find(x => x.id === keyId);
+  if (!k) return;
+  await doQuery([k]);
+}
+
+// ── Toast ──
+function toast(msg, type) {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => { el.remove(); }, 3000);
+}
+
+// ── 键盘快捷键 ──
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if (e.ctrlKey && e.key === 'Enter') {
+    if (document.getElementById('modalOverlay').style.display === 'flex') saveKey();
+    else queryAll();
+  }
+});
+
+// ── 启动 ──
+init();
+</script>
+</body>
+</html>
