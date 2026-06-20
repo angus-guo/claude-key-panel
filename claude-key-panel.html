@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude API KEY 用量面板</title>
+<title>API KEY 用量面板</title>
 <style>
   :root {
     --bg: #0d1117;
@@ -21,7 +21,7 @@
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  
+
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
     background: var(--bg);
@@ -61,6 +61,43 @@
     gap: 8px;
     align-items: center;
   }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 4px;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 9px 20px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    font-family: inherit;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .tab-btn:hover { color: var(--text); background: var(--bg); }
+  .tab-btn.active { background: var(--bg); color: var(--accent); font-weight: 600; }
+  .tab-badge {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    background: var(--bg);
+    padding: 1px 7px;
+    border-radius: 10px;
+  }
+  .tab-btn.active .tab-badge { background: var(--surface); color: var(--accent); }
 
   /* Buttons */
   .btn {
@@ -306,6 +343,16 @@
     padding: 40px;
     color: var(--text-dim);
   }
+  .status-badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .status-badge.ok { background: #1a3a1e; color: var(--success); border: 1px solid var(--success); }
+  .status-badge.bad { background: #3a1a1a; color: var(--danger); border: 1px solid var(--danger); }
 
   /* Add/Edit modal */
   .modal-overlay {
@@ -428,7 +475,7 @@
 <div class="app">
   <!-- Header -->
   <div class="header">
-    <h1><span class="icon">🔑</span>Claude API KEY 用量面板</h1>
+    <h1><span class="icon">🔑</span>API KEY 用量面板</h1>
     <div class="header-actions">
       <span class="proxy-status" id="proxyStatus" title="代理连接状态">
         <span class="proxy-dot" id="proxyDot"></span>
@@ -440,19 +487,29 @@
     </div>
   </div>
 
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" id="tabClaude" onclick="switchTab('claude')">
+      🤖 Claude <span class="tab-badge" id="tabBadgeClaude">0</span>
+    </button>
+    <button class="tab-btn" id="tabCodex" onclick="switchTab('codex')">
+      💻 Codex <span class="tab-badge" id="tabBadgeCodex">0</span>
+    </button>
+  </div>
+
   <!-- Main -->
   <div class="main">
     <!-- Sidebar -->
     <div class="sidebar">
       <div class="sidebar-header">
-        <h2>我的 KEY</h2>
+        <h2 id="sidebarTitle">我的 Claude KEY</h2>
         <span class="key-count" id="keyCount">0</span>
       </div>
       <div class="key-list" id="keyList">
         <div class="empty-keys">还没有添加 KEY<br>点击下方按钮添加</div>
       </div>
       <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="showAddModal()">
-        ＋ 添加 API KEY
+        ＋ <span id="addKeyLabel">添加 Claude KEY</span>
       </button>
     </div>
 
@@ -535,65 +592,104 @@
 // ── 常量 ──
 let PROXY_BASE = localStorage.getItem('claude_proxy_base') || 'http://localhost:8899';
 const API_TARGET = 'https://subclaude.tec-do.cn/v1/usage';
+// Claude 存储
 const STORAGE_KEY = 'claude_key_panel_keys';
 const STORAGE_ACTIVE = 'claude_key_panel_active';
+// Codex 存储
+const CODEX_STORAGE_KEY = 'codex_key_panel_keys';
+const CODEX_STORAGE_ACTIVE = 'codex_key_panel_active';
 
 // ── 状态 ──
-let keys = [];
-let activeKeyId = null;
+let keys = [];                 // Claude keys
+let activeKeyId = null;        // Claude 活跃 key id
+let codexKeys = [];            // Codex keys
+let activeCodexKeyId = null;   // Codex 活跃 key id
 let editingKeyId = null;
 let proxyOnline = false;
+let activeTab = 'claude';      // 'claude' | 'codex'
+
+// ── Tab 辅助 ──
+function currentKeys() { return activeTab === 'claude' ? keys : codexKeys; }
+function currentActiveId() { return activeTab === 'claude' ? activeKeyId : activeCodexKeyId; }
+function setCurrentActiveId(id) {
+  if (activeTab === 'claude') { activeKeyId = id; saveActive(); }
+  else { activeCodexKeyId = id; saveCodexActive(); }
+}
 
 // ── 初始化 ──
 function init() {
   loadKeys();
+  loadCodexKeys();
   renderKeyList();
+  updateTabBadges();
   setDatePreset('today');
   checkProxy();
   syncActiveKey();
 }
 
+// ── 加载 / 保存 ──
 function loadKeys() {
-  try {
-    keys = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch { keys = []; }
-  try {
-    activeKeyId = localStorage.getItem(STORAGE_ACTIVE) || null;
-  } catch { activeKeyId = null; }
-  // 如果活跃 KEY 已删除，清除
-  if (activeKeyId && !keys.find(k => k.id === activeKeyId)) {
-    activeKeyId = null;
-    saveActive();
-  }
-  // 如果只有一个 KEY，自动设为活跃
-  if (!activeKeyId && keys.length === 1) {
-    activeKeyId = keys[0].id;
-    saveActive();
-  }
+  try { keys = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { keys = []; }
+  try { activeKeyId = localStorage.getItem(STORAGE_ACTIVE) || null; } catch { activeKeyId = null; }
+  if (activeKeyId && !keys.find(k => k.id === activeKeyId)) { activeKeyId = null; saveActive(); }
+  if (!activeKeyId && keys.length === 1) { activeKeyId = keys[0].id; saveActive(); }
 }
-
-function saveKeys() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(keys));
-}
-
+function saveKeys() { localStorage.setItem(STORAGE_KEY, JSON.stringify(keys)); }
 function saveActive() {
   if (activeKeyId) localStorage.setItem(STORAGE_ACTIVE, activeKeyId);
   else localStorage.removeItem(STORAGE_ACTIVE);
+}
+
+function loadCodexKeys() {
+  try { codexKeys = JSON.parse(localStorage.getItem(CODEX_STORAGE_KEY) || '[]'); } catch { codexKeys = []; }
+  try { activeCodexKeyId = localStorage.getItem(CODEX_STORAGE_ACTIVE) || null; } catch { activeCodexKeyId = null; }
+  if (activeCodexKeyId && !codexKeys.find(k => k.id === activeCodexKeyId)) { activeCodexKeyId = null; saveCodexActive(); }
+  if (!activeCodexKeyId && codexKeys.length === 1) { activeCodexKeyId = codexKeys[0].id; saveCodexActive(); }
+}
+function saveCodexKeys() { localStorage.setItem(CODEX_STORAGE_KEY, JSON.stringify(codexKeys)); }
+function saveCodexActive() {
+  if (activeCodexKeyId) localStorage.setItem(CODEX_STORAGE_ACTIVE, activeCodexKeyId);
+  else localStorage.removeItem(CODEX_STORAGE_ACTIVE);
+}
+
+// ── Tab 切换 ──
+function switchTab(tab) {
+  if (tab === activeTab) return;
+  activeTab = tab;
+  document.getElementById('tabClaude').classList.toggle('active', tab === 'claude');
+  document.getElementById('tabCodex').classList.toggle('active', tab === 'codex');
+  const isClaude = tab === 'claude';
+  document.getElementById('sidebarTitle').textContent = isClaude ? '我的 Claude KEY' : '我的 Codex KEY';
+  document.getElementById('addKeyLabel').textContent = isClaude ? '添加 Claude KEY' : '添加 Codex KEY';
+  // 清空结果区
+  document.getElementById('resultBody').innerHTML = '<tr><td colspan="4" class="no-data">选择 KEY 并点击查询按钮</td></tr>';
+  document.getElementById('resultFoot').style.display = 'none';
+  document.getElementById('resultStatus').textContent = '';
+  document.getElementById('resultStatus').className = 'result-status';
+  renderKeyList();
+}
+
+function updateTabBadges() {
+  document.getElementById('tabBadgeClaude').textContent = keys.length;
+  document.getElementById('tabBadgeCodex').textContent = codexKeys.length;
 }
 
 // ── KEY 列表渲染 ──
 function renderKeyList() {
   const container = document.getElementById('keyList');
   const countEl = document.getElementById('keyCount');
-  countEl.textContent = keys.length;
+  const list = currentKeys();
+  const activeId = currentActiveId();
+  countEl.textContent = list.length;
+  updateTabBadges();
 
-  if (keys.length === 0) {
+  if (list.length === 0) {
     container.innerHTML = '<div class="empty-keys">还没有添加 KEY<br>点击下方按钮添加</div>';
     return;
   }
 
-  container.innerHTML = keys.map(k => {
-    const isActive = k.id === activeKeyId;
+  container.innerHTML = list.map(k => {
+    const isActive = k.id === activeId;
     const prefix = maskKey(k.key);
     return `
       <div class="key-item ${isActive ? 'active' : ''}" onclick="setActiveKey('${k.id}')" title="点击设为活跃 KEY">
@@ -612,9 +708,13 @@ function renderKeyList() {
 
 function maskKey(key) {
   if (!key) return '';
-  const clean = key.replace(/^sk-/i, '');
-  if (clean.length <= 8) return 'sk-' + clean;
-  return 'sk-' + clean.slice(0, 6) + '…' + clean.slice(-4);
+  if (/^sk-/i.test(key)) {
+    const clean = key.replace(/^sk-/i, '');
+    if (clean.length <= 8) return 'sk-' + clean;
+    return 'sk-' + clean.slice(0, 6) + '…' + clean.slice(-4);
+  }
+  if (key.length <= 12) return key;
+  return key.slice(0, 8) + '…' + key.slice(-4);
 }
 
 function escHtml(s) {
@@ -625,11 +725,11 @@ function escHtml(s) {
 
 // ── 活跃 KEY 操作 ──
 function setActiveKey(id) {
-  activeKeyId = id;
-  saveActive();
+  setCurrentActiveId(id);
   renderKeyList();
   toast('已切换活跃 KEY', 'success');
-  doSwitchKey(id);
+  // 仅 Claude 写入 settings.json；Codex 只在面板内切换
+  if (activeTab === 'claude') doSwitchKey(id);
 }
 
 async function doSwitchKey(id) {
@@ -654,6 +754,7 @@ async function doSwitchKey(id) {
 }
 
 async function syncActiveKey() {
+  // 仅同步 Claude Code 当前配置中的 key
   if (!proxyOnline) { setTimeout(syncActiveKey, 2000); return; }
   try {
     const resp = await fetch(PROXY_BASE + '/current-key', { signal: AbortSignal.timeout(5000) });
@@ -661,23 +762,21 @@ async function syncActiveKey() {
     const data = await resp.json();
     const curKey = data.apiKey || '';
     if (!curKey) return;
-    // 匹配已保存的 KEY
     const match = keys.find(k => k.key.trim() === curKey.trim());
     if (match && match.id !== activeKeyId) {
       activeKeyId = match.id;
       saveActive();
-      renderKeyList();
+      if (activeTab === 'claude') renderKeyList();
     }
   } catch {}
 }
 
 function copyKey(id) {
-  const k = keys.find(x => x.id === id);
+  const k = currentKeys().find(x => x.id === id);
   if (!k) return;
   navigator.clipboard.writeText(k.key).then(() => {
     toast('KEY 已复制到剪贴板', 'success');
   }).catch(() => {
-    // 回退
     const ta = document.createElement('textarea');
     ta.value = k.key;
     document.body.appendChild(ta);
@@ -691,7 +790,8 @@ function copyKey(id) {
 // ── KEY CRUD ──
 function showAddModal() {
   editingKeyId = null;
-  document.getElementById('modalTitle').textContent = '添加 API KEY';
+  const label = activeTab === 'claude' ? 'Claude' : 'Codex';
+  document.getElementById('modalTitle').textContent = `添加 ${label} API KEY`;
   document.getElementById('modalAlias').value = '';
   document.getElementById('modalKey').value = '';
   document.getElementById('modalConfirm').textContent = '保存';
@@ -700,10 +800,11 @@ function showAddModal() {
 }
 
 function editKey(id) {
-  const k = keys.find(x => x.id === id);
+  const k = currentKeys().find(x => x.id === id);
   if (!k) return;
   editingKeyId = id;
-  document.getElementById('modalTitle').textContent = '编辑 API KEY';
+  const label = activeTab === 'claude' ? 'Claude' : 'Codex';
+  document.getElementById('modalTitle').textContent = `编辑 ${label} API KEY`;
   document.getElementById('modalAlias').value = k.alias || '';
   document.getElementById('modalKey').value = k.key || '';
   document.getElementById('modalConfirm').textContent = '更新';
@@ -717,25 +818,23 @@ function saveKey() {
   if (!key) { toast('请输入 API KEY', 'error'); return; }
   if (!key.startsWith('sk-')) { toast('API KEY 应以 sk- 开头', 'error'); return; }
 
+  const list = currentKeys();
   if (editingKeyId) {
-    const k = keys.find(x => x.id === editingKeyId);
-    if (k) {
-      k.alias = alias || '未命名';
-      k.key = key;
-    }
+    const k = list.find(x => x.id === editingKeyId);
+    if (k) { k.alias = alias || '未命名'; k.key = key; }
   } else {
-    keys.push({
-      id: 'key_' + Date.now(),
-      alias: alias || '未命名',
-      key: key
-    });
+    list.push({ id: 'key_' + Date.now(), alias: alias || '未命名', key: key });
   }
 
-  saveKeys();
-  if (!activeKeyId || keys.length === 1) {
-    activeKeyId = keys[keys.length - 1].id;
-    saveActive();
+  // 持久化 + 活跃 key 处理（分 tab）
+  if (activeTab === 'claude') {
+    saveKeys();
+    if (!activeKeyId || keys.length === 1) { activeKeyId = keys[keys.length - 1].id; saveActive(); }
+  } else {
+    saveCodexKeys();
+    if (!activeCodexKeyId || codexKeys.length === 1) { activeCodexKeyId = codexKeys[codexKeys.length - 1].id; saveCodexActive(); }
   }
+
   renderKeyList();
   closeModal();
   toast(editingKeyId ? 'KEY 已更新' : 'KEY 已添加', 'success');
@@ -743,12 +842,15 @@ function saveKey() {
 
 function deleteKey(id) {
   if (!confirm('确定要删除这个 KEY 吗？此操作不可恢复。')) return;
-  keys = keys.filter(k => k.id !== id);
-  if (activeKeyId === id) {
-    activeKeyId = keys.length > 0 ? keys[0].id : null;
-    saveActive();
+  if (activeTab === 'claude') {
+    keys = keys.filter(k => k.id !== id);
+    if (activeKeyId === id) { activeKeyId = keys.length > 0 ? keys[0].id : null; saveActive(); }
+    saveKeys();
+  } else {
+    codexKeys = codexKeys.filter(k => k.id !== id);
+    if (activeCodexKeyId === id) { activeCodexKeyId = codexKeys.length > 0 ? codexKeys[0].id : null; saveCodexActive(); }
+    saveCodexKeys();
   }
-  saveKeys();
   renderKeyList();
   toast('KEY 已删除', 'success');
 }
@@ -761,7 +863,7 @@ function toggleModalKey() {
 function copyModalKey() {
   const inp = document.getElementById('modalKey');
   const was = inp.type;
-  inp.type = 'text'; // 先切换到明文才能选中完整内容
+  inp.type = 'text';
   inp.select();
   document.execCommand('copy');
   inp.type = was;
@@ -779,25 +881,11 @@ function setDatePreset(preset) {
   const today = new Date();
   const toStr = d => d.toISOString().slice(0, 10);
   let from, to;
-
   switch (preset) {
-    case 'today':
-      from = to = toStr(today);
-      break;
-    case 'yesterday':
-      today.setDate(today.getDate() - 1);
-      from = to = toStr(today);
-      break;
-    case '7days':
-      to = toStr(today);
-      today.setDate(today.getDate() - 6);
-      from = toStr(today);
-      break;
-    case '30days':
-      to = toStr(today);
-      today.setDate(today.getDate() - 29);
-      from = toStr(today);
-      break;
+    case 'today': from = to = toStr(today); break;
+    case 'yesterday': today.setDate(today.getDate() - 1); from = to = toStr(today); break;
+    case '7days': to = toStr(today); today.setDate(today.getDate() - 6); from = toStr(today); break;
+    case '30days': to = toStr(today); today.setDate(today.getDate() - 29); from = toStr(today); break;
   }
   document.getElementById('dateFrom').value = from;
   document.getElementById('dateTo').value = to;
@@ -814,11 +902,7 @@ function getDateRange() {
 async function checkProxy() {
   try {
     const resp = await fetch(PROXY_BASE + '/health', { signal: AbortSignal.timeout(3000) });
-    if (resp.ok) {
-      proxyOnline = true;
-      updateProxyUI(true);
-      return;
-    }
+    if (resp.ok) { proxyOnline = true; updateProxyUI(true); return; }
   } catch {}
   proxyOnline = false;
   updateProxyUI(false);
@@ -828,13 +912,8 @@ function updateProxyUI(online) {
   proxyOnline = online;
   const dot = document.getElementById('proxyDot');
   const label = document.getElementById('proxyLabel');
-  if (online) {
-    dot.className = 'proxy-dot online';
-    label.textContent = '代理已连接';
-  } else {
-    dot.className = 'proxy-dot';
-    label.textContent = '代理未连接';
-  }
+  if (online) { dot.className = 'proxy-dot online'; label.textContent = '代理已连接'; }
+  else { dot.className = 'proxy-dot'; label.textContent = '代理未连接'; }
   document.getElementById('btnQueryActive').disabled = !online;
   document.getElementById('btnQueryAll').disabled = !online;
 }
@@ -863,6 +942,11 @@ subclaude.tec-do.cn 的 API 有 CORS 限制，
 修改代理地址：
   点击面板顶部的 ⚙ 按钮，输入新地址后自动重连
 
+Claude / Codex 分页：
+  顶部 Tab 切换。两类 KEY 各自独立存储。
+  切换 Claude KEY 会写入 settings.json；
+  Codex KEY 仅在面板内切换，不改动本地配置。
+
 如果代理已启动但显示"未连接"：
   1. 检查命令行窗口是否正常运行
   2. 确认端口未被占用
@@ -885,15 +969,17 @@ function changeProxyBase() {
 
 // ── 查询 ──
 async function queryActive() {
-  if (!activeKeyId) { toast('请先在左侧选择一个活跃 KEY', 'error'); return; }
-  const k = keys.find(x => x.id === activeKeyId);
+  const activeId = currentActiveId();
+  if (!activeId) { toast('请先在左侧选择一个活跃 KEY', 'error'); return; }
+  const k = currentKeys().find(x => x.id === activeId);
   if (!k) return;
   await doQuery([k]);
 }
 
 async function queryAll() {
-  if (keys.length === 0) { toast('请先添加 API KEY', 'error'); return; }
-  await doQuery(keys);
+  const list = currentKeys();
+  if (list.length === 0) { toast('请先添加 API KEY', 'error'); return; }
+  await doQuery(list);
 }
 
 async function doQuery(keyList) {
@@ -901,10 +987,7 @@ async function doQuery(keyList) {
   if (!from || !to) { toast('请选择日期范围', 'error'); return; }
 
   updateProxyUI(proxyOnline);
-  if (!proxyOnline) {
-    toast('代理未连接，请先启动 start.bat', 'error');
-    return;
-  }
+  if (!proxyOnline) { toast('代理未连接，请先启动 start.bat', 'error'); return; }
 
   const statusEl = document.getElementById('resultStatus');
   statusEl.textContent = '查询中...';
@@ -943,9 +1026,9 @@ async function doQuery(keyList) {
   }
 }
 
+// ── Claude 响应解析 ──
 function parseUsageData(data) {
   // 格式 0: subclaude.tec-do.cn — model_stats 数组
-  // { model_stats: [{ model, requests, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, total_tokens, cost }], rate_limits: [{ window:"1d"|"7d", used, limit }] }
   if (data.model_stats && Array.isArray(data.model_stats)) {
     const models = data.model_stats.map(m => ({
       model: m.model || '—',
@@ -963,9 +1046,8 @@ function parseUsageData(data) {
     return { models, dailyLimit, weeklyLimit, raw: data };
   }
 
-  // 格式 1-4: 其他格式 — 统一转为 models 数组
+  // 其他历史格式 — 统一转为 models 数组
   let rows = [];
-
   if (data.data && Array.isArray(data.data)) {
     for (const item of data.data) {
       if (item.results && Array.isArray(item.results)) {
@@ -975,24 +1057,49 @@ function parseUsageData(data) {
       }
     }
   }
-
   if (rows.length === 0 && data.usage && Array.isArray(data.usage)) {
     for (const u of data.usage) {
       rows.push({ model: u.model || '', requests: 0, input_tokens: u.input_tokens||u.input||0, output_tokens: u.output_tokens||u.output||0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: (u.input_tokens||u.input||0)+(u.output_tokens||u.output||0), cost: 0 });
     }
   }
-
   if (rows.length === 0 && (data.total_cost !== undefined || data.total_tokens !== undefined)) {
     rows.push({ model: 'all', requests: 0, input_tokens: data.input_tokens||data.total_tokens||0, output_tokens: data.output_tokens||0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: data.total_tokens||0, cost: data.total_cost||0 });
   }
-
   if (rows.length === 0 && Array.isArray(data) && data.length > 0 && typeof data[0] === 'object') {
     for (const item of data) {
       rows.push({ model: item.model||'', requests: 0, input_tokens: item.input_tokens||item.input||0, output_tokens: item.output_tokens||item.output||0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: (item.input_tokens||item.input||0)+(item.output_tokens||item.output||0), cost: 0 });
     }
   }
-
   return { models: rows, dailyLimit: null, weeklyLimit: null, raw: data };
+}
+
+// ── Codex 响应解析 ──
+// 格式: { isValid, mode, status, rate_limits:[{window:"1d"|"7d", limit, used, remaining, reset_at}], usage:{today:{...}, total:{...}} }
+function parseCodexData(data) {
+  const rl = data.rate_limits || [];
+  const dailyLimit = rl.find(r => r.window === '1d') || null;
+  const weeklyLimit = rl.find(r => r.window === '7d') || null;
+  const usage = data.usage || {};
+  const mk = (u) => ({
+    requests: (u && u.requests) || 0,
+    input_tokens: (u && u.input_tokens) || 0,
+    output_tokens: (u && u.output_tokens) || 0,
+    cache_creation_tokens: (u && u.cache_creation_tokens) || 0,
+    cache_read_tokens: (u && u.cache_read_tokens) || 0,
+    total_tokens: (u && u.total_tokens) || 0,
+    cost: (u && (u.cost ?? u.actual_cost)) || 0,
+  });
+  return {
+    isValid: data.isValid !== false,
+    status: data.status || '',
+    mode: data.mode || '',
+    today: mk(usage.today),
+    total: mk(usage.total),
+    rpm: usage.rpm || 0,
+    tpm: usage.tpm || 0,
+    avgDuration: usage.average_duration_ms || 0,
+    dailyLimit, weeklyLimit, raw: data,
+  };
 }
 
 function formatResetTime(isoStr) {
@@ -1009,9 +1116,27 @@ function formatResetTime(isoStr) {
   } catch { return isoStr; }
 }
 
+// 渲染限额进度条
+function limitBarHtml(lim) {
+  if (!lim) return '<span style="color:var(--text-dim)">—</span>';
+  const u = lim.used || 0;
+  const l = lim.limit || 1;
+  const p = Math.min((u / l) * 100, 100);
+  const cls = p > 90 ? 'critical' : (p > 70 ? 'high' : '');
+  const r = lim.reset_at ? formatResetTime(lim.reset_at) : '';
+  return `<div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <div class="usage-bar-wrap"><div class="usage-bar-fill ${cls}" style="width:${p}%"></div></div>
+      <span style="font-size:0.78rem;white-space:nowrap">$${u.toFixed(2)} / $${l.toFixed(0)}</span>
+    </div>${r ? `<div style="font-size:0.65rem;color:var(--text-dim);margin-top:1px">重置 ${r}</div>` : ''}
+  </div>`;
+}
+
+// ── 结果渲染（按 tab 分流）──
 function renderResults(results, errors, from, to) {
   const tbody = document.getElementById('resultBody');
   const tfoot = document.getElementById('resultFoot');
+  const activeId = currentActiveId();
 
   if (results.length === 0 && errors.length === 0) {
     tbody.innerHTML = '<tr><td colspan="4" class="no-data">无数据</td></tr>';
@@ -1032,81 +1157,34 @@ function renderResults(results, errors, from, to) {
     </tr>`;
   }
 
-  // 结果行
   let ki = 0;
   for (const r of results) {
-    const parsed = parseUsageData(r.data);
-    const isActive = r.keyId === activeKeyId;
+    const isActive = r.keyId === activeId;
     ki++;
-
-    // KEY 级别汇总
-    let keyCost = 0, keyTokens = 0, keyRequests = 0;
-    for (const m of parsed.models) {
-      keyCost += m.cost;
-      keyTokens += m.total_tokens;
-      keyRequests += m.requests;
-    }
-
-    // 日限额进度条
-    let dailyHtml = '<span style="color:var(--text-dim)">—</span>';
-    if (parsed.dailyLimit) {
-      const u = parsed.dailyLimit.used || 0;
-      const l = parsed.dailyLimit.limit || 1;
-      const p = Math.min((u / l) * 100, 100);
-      const cls = p > 90 ? 'critical' : (p > 70 ? 'high' : '');
-      const r = parsed.dailyLimit.reset_at ? formatResetTime(parsed.dailyLimit.reset_at) : '';
-      dailyHtml = `<div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <div class="usage-bar-wrap"><div class="usage-bar-fill ${cls}" style="width:${p}%"></div></div>
-          <span style="font-size:0.78rem;white-space:nowrap">$${u.toFixed(2)} / $${l.toFixed(0)}</span>
-        </div>${r ? `<div style="font-size:0.65rem;color:var(--text-dim);margin-top:1px">重置 ${r}</div>` : ''}
-      </div>`;
-      grandDailyUsed += u; grandDailyLimit += l;
-    }
-
-    // 周限额进度条
-    let weeklyHtml = '<span style="color:var(--text-dim)">—</span>';
-    if (parsed.weeklyLimit) {
-      const u = parsed.weeklyLimit.used || 0;
-      const l = parsed.weeklyLimit.limit || 1;
-      const p = Math.min((u / l) * 100, 100);
-      const cls = p > 90 ? 'critical' : (p > 70 ? 'high' : '');
-      const r = parsed.weeklyLimit.reset_at ? formatResetTime(parsed.weeklyLimit.reset_at) : '';
-      weeklyHtml = `<div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <div class="usage-bar-wrap"><div class="usage-bar-fill ${cls}" style="width:${p}%"></div></div>
-          <span style="font-size:0.78rem;white-space:nowrap">$${u.toFixed(2)} / $${l.toFixed(0)}</span>
-        </div>${r ? `<div style="font-size:0.65rem;color:var(--text-dim);margin-top:1px">重置 ${r}</div>` : ''}
-      </div>`;
-      grandWeeklyUsed += u; grandWeeklyLimit += l;
-    }
-
     const detailId = `detail-${ki}`;
     const iconId = `icon-${ki}`;
 
-    html += `<tr class="key-summary-row ${isActive ? 'row-active' : ''}" onclick="toggleDetail('${detailId}','${iconId}',this)" style="cursor:pointer">
-      <td>
-        <span class="expand-icon" id="${iconId}">▶</span>
-        <strong>${escHtml(r.alias)}</strong>
-        <div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px">请求 ${keyRequests} · Token ${keyTokens.toLocaleString()} · $${keyCost.toFixed(4)}</div>
-      </td>
-      <td>${dailyHtml}</td>
-      <td>${weeklyHtml}</td>
-      <td><button class="btn btn-xs" onclick="event.stopPropagation();setActiveKey('${r.keyId}')">⭐ 切换</button></td>
-    </tr>`;
+    if (activeTab === 'codex') {
+      // ── Codex 行 ──
+      const p = parseCodexData(r.data);
+      const badge = p.isValid
+        ? `<span class="status-badge ok">${escHtml(p.status || 'active')}</span>`
+        : `<span class="status-badge bad">${escHtml(p.status || 'invalid')}</span>`;
+      const t = p.today;
+      html += `<tr class="key-summary-row ${isActive ? 'row-active' : ''}" onclick="toggleDetail('${detailId}','${iconId}',this)" style="cursor:pointer">
+        <td>
+          <span class="expand-icon" id="${iconId}">▶</span>
+          <strong>${escHtml(r.alias)}</strong>${badge}
+          <div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px">今日 请求 ${t.requests} · Token ${t.total_tokens.toLocaleString()} · $${t.cost.toFixed(4)}</div>
+        </td>
+        <td>${limitBarHtml(p.dailyLimit)}</td>
+        <td>${limitBarHtml(p.weeklyLimit)}</td>
+        <td><button class="btn btn-xs" onclick="event.stopPropagation();setActiveKey('${r.keyId}')">⭐ 设为活跃</button></td>
+      </tr>`;
 
-    // 模型明细行（默认隐藏）
-    html += `<tr class="key-detail-row" id="${detailId}" style="display:none">
-      <td colspan="4">
-        <table class="detail-table">
-          <thead><tr>
-            <th>模型</th><th>请求</th><th>输入 Token</th><th>输出 Token</th>
-            <th>缓存创建</th><th>缓存读取</th><th>总 Token</th><th>花费</th>
-          </tr></thead>
-          <tbody>`;
-    for (const m of parsed.models) {
-      html += `<tr>
-        <td>${escHtml(m.model)}</td>
+      // 明细行：今日 vs 累计
+      const rowOf = (label, m) => `<tr>
+        <td>${label}</td>
         <td>${m.requests.toLocaleString()}</td>
         <td class="mono">${m.input_tokens.toLocaleString()}</td>
         <td class="mono">${m.output_tokens.toLocaleString()}</td>
@@ -1115,13 +1193,70 @@ function renderResults(results, errors, from, to) {
         <td class="mono">${m.total_tokens.toLocaleString()}</td>
         <td class="mono cost">$${m.cost.toFixed(4)}</td>
       </tr>`;
+      html += `<tr class="key-detail-row" id="${detailId}" style="display:none">
+        <td colspan="4">
+          <table class="detail-table">
+            <thead><tr>
+              <th>周期</th><th>请求</th><th>输入 Token</th><th>输出 Token</th>
+              <th>缓存创建</th><th>缓存读取</th><th>总 Token</th><th>花费</th>
+            </tr></thead>
+            <tbody>${rowOf('今日', p.today)}${rowOf('累计', p.total)}</tbody>
+          </table>
+          <div style="padding:4px 12px 10px;font-size:0.72rem;color:var(--text-dim)">
+            RPM ${p.rpm} · TPM ${p.tpm} · 平均耗时 ${Math.round(p.avgDuration)}ms${p.mode ? ' · 模式 ' + escHtml(p.mode) : ''}
+          </div>
+        </td>
+      </tr>`;
+
+      if (p.dailyLimit) { grandDailyUsed += p.dailyLimit.used || 0; grandDailyLimit += p.dailyLimit.limit || 0; }
+      if (p.weeklyLimit) { grandWeeklyUsed += p.weeklyLimit.used || 0; grandWeeklyLimit += p.weeklyLimit.limit || 0; }
+
+    } else {
+      // ── Claude 行 ──
+      const parsed = parseUsageData(r.data);
+      let keyCost = 0, keyTokens = 0, keyRequests = 0;
+      for (const m of parsed.models) { keyCost += m.cost; keyTokens += m.total_tokens; keyRequests += m.requests; }
+
+      html += `<tr class="key-summary-row ${isActive ? 'row-active' : ''}" onclick="toggleDetail('${detailId}','${iconId}',this)" style="cursor:pointer">
+        <td>
+          <span class="expand-icon" id="${iconId}">▶</span>
+          <strong>${escHtml(r.alias)}</strong>
+          <div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px">请求 ${keyRequests} · Token ${keyTokens.toLocaleString()} · $${keyCost.toFixed(4)}</div>
+        </td>
+        <td>${limitBarHtml(parsed.dailyLimit)}</td>
+        <td>${limitBarHtml(parsed.weeklyLimit)}</td>
+        <td><button class="btn btn-xs" onclick="event.stopPropagation();setActiveKey('${r.keyId}')">⭐ 切换</button></td>
+      </tr>`;
+
+      html += `<tr class="key-detail-row" id="${detailId}" style="display:none">
+        <td colspan="4">
+          <table class="detail-table">
+            <thead><tr>
+              <th>模型</th><th>请求</th><th>输入 Token</th><th>输出 Token</th>
+              <th>缓存创建</th><th>缓存读取</th><th>总 Token</th><th>花费</th>
+            </tr></thead>
+            <tbody>`;
+      for (const m of parsed.models) {
+        html += `<tr>
+          <td>${escHtml(m.model)}</td>
+          <td>${m.requests.toLocaleString()}</td>
+          <td class="mono">${m.input_tokens.toLocaleString()}</td>
+          <td class="mono">${m.output_tokens.toLocaleString()}</td>
+          <td class="mono">${m.cache_creation_tokens.toLocaleString()}</td>
+          <td class="mono">${m.cache_read_tokens.toLocaleString()}</td>
+          <td class="mono">${m.total_tokens.toLocaleString()}</td>
+          <td class="mono cost">$${m.cost.toFixed(4)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></td></tr>`;
+
+      if (parsed.dailyLimit) { grandDailyUsed += parsed.dailyLimit.used || 0; grandDailyLimit += parsed.dailyLimit.limit || 0; }
+      if (parsed.weeklyLimit) { grandWeeklyUsed += parsed.weeklyLimit.used || 0; grandWeeklyLimit += parsed.weeklyLimit.limit || 0; }
     }
-    html += `</tbody></table></td></tr>`;
   }
 
   tbody.innerHTML = html || '<tr><td colspan="4" class="no-data">无数据</td></tr>';
 
-  // 汇总行
   if (results.length > 0) {
     tfoot.style.display = '';
     tfoot.innerHTML = `<tr>
@@ -1139,21 +1274,14 @@ function toggleDetail(detailId, iconId, row) {
   const detail = document.getElementById(detailId);
   const icon = document.getElementById(iconId);
   if (!detail) return;
-  if (detail.style.display === 'none' || detail.style.display === '') {
-    const hidden = detail.style.display === 'none';
-    detail.style.display = hidden ? '' : 'none';
-    if (icon) icon.textContent = hidden ? '▼' : '▶';
-    // toggle active class
-    if (row) row.classList.toggle('expanded');
-  } else {
-    detail.style.display = 'none';
-    if (icon) icon.textContent = '▶';
-    if (row) row.classList.remove('expanded');
-  }
+  const hidden = detail.style.display === 'none' || detail.style.display === '';
+  detail.style.display = hidden ? '' : 'none';
+  if (icon) icon.textContent = hidden ? '▼' : '▶';
+  if (row) row.classList.toggle('expanded', hidden);
 }
 
 async function querySingle(keyId) {
-  const k = keys.find(x => x.id === keyId);
+  const k = currentKeys().find(x => x.id === keyId);
   if (!k) return;
   await doQuery([k]);
 }
@@ -1182,3 +1310,5 @@ init();
 </script>
 </body>
 </html>
+
+
