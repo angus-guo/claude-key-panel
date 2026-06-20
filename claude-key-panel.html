@@ -667,6 +667,11 @@ function switchTab(tab) {
   document.getElementById('resultStatus').textContent = '';
   document.getElementById('resultStatus').className = 'result-status';
   renderKeyList();
+
+  // 切换 Tab 后自动查询一次（代理在线且该 Tab 有 key 时）
+  if (proxyOnline && currentKeys().length > 0) {
+    queryAll();
+  }
 }
 
 function updateTabBadges() {
