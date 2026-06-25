@@ -1107,6 +1107,13 @@ function parseCodexData(data) {
   };
 }
 
+// 按响应结构判断是否为 Codex 格式（无 model_stats，含 isValid 或 usage.today/total）
+function isCodexResponse(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  if (data.model_stats) return false;
+  return ('isValid' in data) || (data.usage && !Array.isArray(data.usage) && (data.usage.today || data.usage.total));
+}
+
 function formatResetTime(isoStr) {
   try {
     const d = new Date(isoStr);
@@ -1169,7 +1176,7 @@ function renderResults(results, errors, from, to) {
     const detailId = `detail-${ki}`;
     const iconId = `icon-${ki}`;
 
-    if (activeTab === 'codex') {
+    if (isCodexResponse(r.data)) {
       // ── Codex 行 ──
       const p = parseCodexData(r.data);
       const badge = p.isValid
