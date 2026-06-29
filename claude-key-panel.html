@@ -1179,9 +1179,13 @@ function renderResults(results, errors, from, to) {
     if (isCodexResponse(r.data)) {
       // ── Codex 行 ──
       const p = parseCodexData(r.data);
-      const badge = p.isValid
-        ? `<span class="status-badge ok">${escHtml(p.status || 'active')}</span>`
-        : `<span class="status-badge bad">${escHtml(p.status || 'invalid')}</span>`;
+      const statusText = p.status || 'invalid';
+      const badge = isActive
+        ? '<span class="status-badge ok">active</span>'
+        : (!p.isValid ? `<span class="status-badge bad">${escHtml(statusText)}</span>` : '');
+      const actionHtml = isActive
+        ? '<span style="color:var(--text-dim);font-size:0.78rem">当前使用中</span>'
+        : `<button class="btn btn-xs" onclick="event.stopPropagation();setActiveKey('${r.keyId}')">⭐ 设为活跃</button>`;
       const t = p.today;
       html += `<tr class="key-summary-row ${isActive ? 'row-active' : ''}" onclick="toggleDetail('${detailId}','${iconId}',this)" style="cursor:pointer">
         <td>
@@ -1191,7 +1195,7 @@ function renderResults(results, errors, from, to) {
         </td>
         <td>${limitBarHtml(p.dailyLimit)}</td>
         <td>${limitBarHtml(p.weeklyLimit)}</td>
-        <td><button class="btn btn-xs" onclick="event.stopPropagation();setActiveKey('${r.keyId}')">⭐ 设为活跃</button></td>
+        <td>${actionHtml}</td>
       </tr>`;
 
       // 明细行：今日 vs 累计
@@ -1228,6 +1232,9 @@ function renderResults(results, errors, from, to) {
       const parsed = parseUsageData(r.data);
       let keyCost = 0, keyTokens = 0, keyRequests = 0;
       for (const m of parsed.models) { keyCost += m.cost; keyTokens += m.total_tokens; keyRequests += m.requests; }
+      const actionHtml = isActive
+        ? '<span style="color:var(--text-dim);font-size:0.78rem">当前使用中</span>'
+        : `<button class="btn btn-xs" onclick="event.stopPropagation();setActiveKey('${r.keyId}')">⭐ 切换</button>`;
 
       html += `<tr class="key-summary-row ${isActive ? 'row-active' : ''}" onclick="toggleDetail('${detailId}','${iconId}',this)" style="cursor:pointer">
         <td>
@@ -1237,7 +1244,7 @@ function renderResults(results, errors, from, to) {
         </td>
         <td>${limitBarHtml(parsed.dailyLimit)}</td>
         <td>${limitBarHtml(parsed.weeklyLimit)}</td>
-        <td><button class="btn btn-xs" onclick="event.stopPropagation();setActiveKey('${r.keyId}')">⭐ 切换</button></td>
+        <td>${actionHtml}</td>
       </tr>`;
 
       html += `<tr class="key-detail-row" id="${detailId}" style="display:none">
@@ -1286,8 +1293,8 @@ function toggleDetail(detailId, iconId, row) {
   const detail = document.getElementById(detailId);
   const icon = document.getElementById(iconId);
   if (!detail) return;
-  const hidden = detail.style.display === 'none' || detail.style.display === '';
-  detail.style.display = hidden ? '' : 'none';
+  const hidden = detail.style.display === 'none' || getComputedStyle(detail).display === 'none';
+  detail.style.display = hidden ? 'table-row' : 'none';
   if (icon) icon.textContent = hidden ? '▼' : '▶';
   if (row) row.classList.toggle('expanded', hidden);
 }
@@ -1322,5 +1329,3 @@ init();
 </script>
 </body>
 </html>
-
-
