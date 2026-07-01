@@ -607,6 +607,7 @@ let activeCodexKeyId = null;   // Codex 活跃 key id
 let editingKeyId = null;
 let proxyOnline = false;
 let activeTab = 'claude';      // 'claude' | 'codex'
+let lastRender = null;         // 缓存上一次渲染的结果，供切换活跃 KEY 后重绘
 
 // ── Tab 辅助 ──
 function currentKeys() { return activeTab === 'claude' ? keys : codexKeys; }
@@ -666,6 +667,7 @@ function switchTab(tab) {
   document.getElementById('resultFoot').style.display = 'none';
   document.getElementById('resultStatus').textContent = '';
   document.getElementById('resultStatus').className = 'result-status';
+  lastRender = null;  // 清掉上一个 Tab 的结果缓存
   renderKeyList();
 
   // 切换 Tab 后自动查询一次（代理在线且该 Tab 有 key 时）
@@ -732,6 +734,8 @@ function escHtml(s) {
 function setActiveKey(id) {
   setCurrentActiveId(id);
   renderKeyList();
+  // 立即用缓存重绘结果表格，让"当前使用中"标签/高亮即时更新
+  if (lastRender) renderResults(lastRender.results, lastRender.errors, lastRender.from, lastRender.to);
   toast('已切换活跃 KEY', 'success');
   // 仅 Claude 写入 settings.json；Codex 只在面板内切换
   if (activeTab === 'claude') doSwitchKey(id);
@@ -1146,6 +1150,7 @@ function limitBarHtml(lim) {
 
 // ── 结果渲染（按 tab 分流）──
 function renderResults(results, errors, from, to) {
+  lastRender = { results, errors, from, to };
   const tbody = document.getElementById('resultBody');
   const tfoot = document.getElementById('resultFoot');
   const activeId = currentActiveId();
